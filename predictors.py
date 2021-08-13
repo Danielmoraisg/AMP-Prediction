@@ -5,6 +5,7 @@ import pandas as pd
 import xerox
 import time
 from Bio import SeqIO
+import os
 
 def portreports(file, driver_path, url = 'https://www.portoreports.com/stm'):
     with open(file) as f:
@@ -83,11 +84,12 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
                 df0 = pd.concat([df0, df], ignore_index=True)
             except IndexError:
                 problems.append(record)
-            print(f'{len(problems)*23} were not able to be used by dbaasp\nTo check sequences that were not used pleas use the argument problems = true')
-        if problems:
-            return df0, problems
-        else:
-            return df0
+            print(f'{len(problems)*23} were not able to be used by dbaasp\nTo check sequences that were not used please use the argument problems = true')
+    os.remove('temp.fasta')
+    if problems:
+        return df0, problems
+    else:
+        return df0
 
 def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/'):
     with open(file) as f:
