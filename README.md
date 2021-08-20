@@ -37,4 +37,4 @@ File containing functions to predict AMP
 
 ### [teste.txt](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/teste.txt)
 
-File containing examples used in the [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) file
+Fasta file containing examples used in the [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) file
