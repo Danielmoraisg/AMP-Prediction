@@ -2,7 +2,7 @@
 
 ## how to use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb)
 
-To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) you must install one of the following webdrivers and point each function to it as the "diver_path" argument
+To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) you must install one of the following webdrivers and point each function to it as the "driver_path" argument
 
 <table border="1" class="docutils">
 <colgroup>
