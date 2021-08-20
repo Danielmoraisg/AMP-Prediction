@@ -31,10 +31,10 @@ To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/
 
 Testcase using functions listed in [predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
 
-###[predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
+### [predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
 
 File containing functions to predict AMP
 
-###[teste.txt](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/teste.txt)
+### [teste.txt](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/teste.txt)
 
 File containing examples used in the [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) file
