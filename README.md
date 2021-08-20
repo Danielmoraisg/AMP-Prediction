@@ -1,6 +1,6 @@
 # AMP-Prediction
 
-## how to use the functions listed in example.py
+## how to use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb)
 
 To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) you must install one of the following webdrivers and point each function to it as the "diver_path" argument
 
