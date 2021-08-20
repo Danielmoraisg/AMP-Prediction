@@ -29,7 +29,7 @@ To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/
 
 ### [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb)
 
-Testcase using functions listed in [predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
+Test case using functions listed in [predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
 
 ### [predictors.py](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/predictors.py)
 
