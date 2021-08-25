@@ -4,6 +4,8 @@
 
 To use the functions listed in [example.ipynb](https://github.com/Danielmoraisg/AMP-Prediction/blob/main/example.ipynb) you must install one of the following webdrivers and point each function to it as the "driver_path" argument
 
+**As for now, only the chrome webdriver is working**
+
 <table border="1" class="docutils">
 <colgroup>
 <col width="16%">
