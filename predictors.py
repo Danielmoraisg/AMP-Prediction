@@ -6,20 +6,36 @@ import xerox
 import time
 from Bio import SeqIO
 import os
-
+def set_chrome_config():
+    options = webdriver.ChromeOptions()
+    options.add_argument("no-sandbox")
+    options.add_argument("start-maximized")
+    options.add_argument("enable-automation")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument('--headless')
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--proxy-server='direct://'")
+    options.add_argument("--proxy-bypass-list=*")
+    options.add_argument("--lang=en_US")
+    return options
 def portreports(file, driver_path, url = 'https://www.portoreports.com/stm'):
     with open(file) as f:
         fasta = f.read()
-    driver = webdriver.Chrome(driver_path)
+    driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="post-77"]/div/form/textarea')
     xerox.copy(fasta)
-    inputElement.send_keys(Keys.CONTROL+ "v")
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
     inputElement.submit()
     content = driver.page_source
     soup = bs(content,features="lxml")
     driver.close()
     df = pd.read_html(soup.prettify())[0]
+    df['Sequence Number'] = df['Sequence Number'] - 2
     return df.iloc[2: , :].reset_index(drop = True)
 
 #function to generate bathces of sequences
@@ -84,26 +100,29 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
                 df0 = pd.concat([df0, df], ignore_index=True)
             except IndexError:
                 problems.append(record)
-            print(f'{len(problems)*23} were not able to be used by dbaasp\nTo check sequences that were not used please use the argument problems = true')
+        print(f'{len(problems)*23} were not able to be used by dbaasp\nTo check sequences that were not used please use the argument problems = true')
     os.remove('temp.fasta')
     if problems:
         return df0, problems
     else:
         return df0
-
+    
 def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/'):
     with open(file) as f:
         fasta = f.read()
-    driver = webdriver.Chrome(driver_path)
+    driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
+    driver.implicitly_wait(600)
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="frm1"]/p[1]/textarea')
     xerox.copy(fasta)
-    inputElement.send_keys(Keys.CONTROL+ "v")
-    driver.find_element_by_xpath('//*[@id="frm1"]/p[6]/label/input').click()
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
+    algo = driver.find_element_by_xpath('//*[@id="frm1"]/p[6]/label/input')
+    #driver.execute_script("arguments[0].click();", algo)
+    algo.click()
     inputElement.submit()
     content = driver.page_source
     soup = bs(content,features="lxml")
-    driver.close()
     dfs = pd.read_html(soup.prettify())
     wanted = [dfs[3],dfs[4],dfs[6]]
     algos = ['SVM','RFC','ANN','DAC']
@@ -111,16 +130,18 @@ def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/'):
     for df in wanted:
         df['Algorithm'] = algos[count]
         count+=1
+    driver.close()
     return  pd.concat(wanted, ignore_index = True)
 
 def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html'):
     with open(file) as f:
         fasta = f.read()
-    driver = webdriver.Chrome(driver_path)
+    driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="main2"]/form/center[1]/textarea')
     xerox.copy(fasta)
-    inputElement.send_keys(Keys.CONTROL+ "v")
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
     inputElement.submit()
     content = driver.page_source
     soup = bs(content,features="lxml")
