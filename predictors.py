@@ -54,6 +54,9 @@ def portreports(file, driver_path, url = 'https://www.portoreports.com/stm'):
     driver.close()
     df = pd.read_html(soup.prettify())[0]
     df['Sequence Number'] = df['Sequence Number'] - 2
+    entrys = list(SeqIO.parse(file,'fasta')) 
+    df['Seq ID'] = [x.id for x in entrys]
+    df['Seq'] = [str(x.seq)for x in entrys]
     return df.iloc[2: , :].reset_index(drop = True)
 
 #function to generate bathces of sequences
