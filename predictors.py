@@ -6,28 +6,46 @@ import xerox
 import time
 from Bio import SeqIO
 import os
-def set_chrome_config():
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+import random
+import string
+from tqdm import tqdm
+
+
+def set_chrome_config(headless = True):
     options = webdriver.ChromeOptions()
     options.add_argument("no-sandbox")
     options.add_argument("start-maximized")
     options.add_argument("enable-automation")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-extensions")
-    options.add_argument('--headless')
+    if headless == True:
+        options.add_argument('--headless')
     options.add_argument("--window-size=1920,1080")
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument("--proxy-server='direct://'")
     options.add_argument("--proxy-bypass-list=*")
     options.add_argument("--lang=en_US")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-browser-side-navigation")
     return options
+    
+def random_string(length):
+    # With combination of lower and upper case
+    result_str = ''.join(random.choice(string.ascii_letters) for i in range(length))
+    # print random string
+    return result_str
+
 def portreports(file, driver_path, url = 'https://www.portoreports.com/stm'):
     with open(file) as f:
         fasta = f.read()
     driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="post-77"]/div/form/textarea')
-    xerox.copy(fasta)
+    #xerox.copy(fasta)
     driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
     #inputElement.send_keys(Keys.CONTROL+ "v")
     inputElement.submit()
@@ -107,39 +125,42 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
     else:
         return df0
     
-def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/'):
+def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200):
     with open(file) as f:
         fasta = f.read()
     driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
-    driver.implicitly_wait(600)
+    driver.implicitly_wait(wait)
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="frm1"]/p[1]/textarea')
-    xerox.copy(fasta)
+    #xerox.copy(fasta)
     driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
     #inputElement.send_keys(Keys.CONTROL+ "v")
     algo = driver.find_element_by_xpath('//*[@id="frm1"]/p[6]/label/input')
     #driver.execute_script("arguments[0].click();", algo)
     algo.click()
-    inputElement.submit()
+    WebDriverWait(driver, wait).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="frm1"]/p[7]/input[1]'))).click()
+    #inputElement.submit()
     content = driver.page_source
     soup = bs(content,features="lxml")
     dfs = pd.read_html(soup.prettify())
-    wanted = [dfs[3],dfs[4],dfs[6]]
-    algos = ['SVM','RFC','ANN','DAC']
+    wanted = (dfs[3],dfs[4],dfs[6])
+    algos = ('SVM','RFC','ANN','DAC')
+    return wanted
     count = 0
     for df in wanted:
         df['Algorithm'] = algos[count]
         count+=1
     driver.close()
-    return  pd.concat(wanted, ignore_index = True)
-
+    final = pd.concat(wanted, ignore_index = True)
+    #return  final
+    
 def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html'):
     with open(file) as f:
         fasta = f.read()
     driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
     driver.get(url)
     inputElement = driver.find_element_by_xpath('//*[@id="main2"]/form/center[1]/textarea')
-    xerox.copy(fasta)
+    #xerox.copy(fasta)
     driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
     #inputElement.send_keys(Keys.CONTROL+ "v")
     inputElement.submit()
@@ -150,3 +171,69 @@ def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm
     df.columns = df.iloc[0]
     df.drop(df.index[0])
     return df.iloc[1: , :].reset_index(drop = True)
+
+class ampep:
+
+    def send(file, driver_path, mail, sleep = 2, description =  random_string(255), verbose = True):
+        with open(file, 'r') as f:
+            fasta = f.read()
+        url = 'https://app.cbbio.online/ampep/home'
+        driver = webdriver.Chrome(driver_path, options = set_chrome_config(headless = False))
+        driver.get(url)
+        inputElement = driver.find_element_by_xpath('//*[@id="input-65"]')
+        xerox.copy(fasta)
+        inputElement.send_keys(Keys.CONTROL+ "v")
+        #driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+        driver.find_element_by_xpath('//*[@id="app"]/div/main/div/div/div/div[2]/div[2]/div/button').click()
+        time.sleep(sleep)
+        driver.find_element_by_xpath('//*[@id="app"]/div/main/div/div/div/div[2]/div[4]/div/button[1]/span').click()
+        time.sleep(sleep)
+        job_desc = driver.find_element_by_xpath('//*[@id="input-112"]')
+        job_desc.send_keys(description)
+        driver.find_element_by_xpath('//*[@id="app"]/div/main/div/div/div/div[2]/div[6]/div/button[1]/span').click()
+        time.sleep(sleep)
+        inputMail = driver.find_element_by_xpath('//*[@id="input-120"]')
+        inputMail.send_keys(mail)
+        time.sleep(sleep)
+        submit = driver.find_element_by_xpath('//*[@id="app"]/div/main/div/div/div/div[2]/div[8]/div/button[1]/span').click()
+        try:
+            
+            WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.XPATH, '//*[@id="retrieve-page-index"]/div/div/table')))
+        except TimeoutException:
+            print('Timeout, took more than 60s to send job')
+        if verbose == True:
+            print('File sent to analysis \n to get the results call the retrieve method')
+        
+        driver.close()
+    def retrieve(mail, driver_path, wanted = 'finished'):
+        '''
+        Parameters: wanted, list, default = finished
+                        argument to find which job description to look. IF default = every finished job will be retrieved
+        
+        '''
+        url = 'https://app.cbbio.online/ampep/retrieve/'+mail
+        driver = webdriver.Chrome(driver_path,options = set_chrome_config())
+        driver.get(url)
+        time.sleep(3)
+        content = driver.page_source
+        soup = bs(content,features="lxml")
+        driver.close()
+        dfs = pd.read_html(soup.prettify())
+        jobs = dfs[0]
+        if wanted == 'finished':
+            wanted = jobs.loc[jobs.Status == 'finished']['Job ID']
+        else:
+            wanted = list(jobs[jobs['Description'].isin(wanted)]['Job ID'].values)
+        final = pd.DataFrame(columns = ['Unnamed: 0', 'id', 'AmPEP', 'RF-AmPEP30', 'Number of positives'])
+        for ID in tqdm(range(len(wanted)), total = len(wanted)):
+            ID = wanted[ID]
+            url = 'https://app.cbbio.online/ampep/jobs/'+ID
+            driver = webdriver.Chrome(driver_path,options = set_chrome_config())
+            driver.get(url)
+            time.sleep(2)
+            content = driver.page_source
+            soup = bs(content,features="lxml")
+            df = pd.read_html(soup.prettify())[0]
+            final = pd.concat([final,df],ignore_index=True)
+            driver.close()
+        return final
