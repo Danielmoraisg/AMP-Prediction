@@ -97,27 +97,33 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
         records = SeqIO.parse(handle, "fasta")
         first = True
         if first:
-            df0 = pd.DataFrame(columns = ['Seq. ID','Class']) #starting the DataFrame
+            df0 = pd.DataFrame(columns = ['Seq. ID','Class','Seq ID','Seq']) #starting the DataFrame
             first = False
         problems = []
-        for record in batch(list(records), n_try):
+        lista = list(batch(list(records), n_try))
+        for i in tqdm(range(len(lista)), total = len(lista)):
+            record = lista[i]
             SeqIO.write(record, "small_temp.fasta", "fasta")
             with open('small_temp.fasta') as f:
                 small_fasta = f.read()
+            entrys = list(SeqIO.parse("small_temp.fasta",'fasta')) 
             os.remove("small_temp.fasta")
-            driver = webdriver.Chrome(driver_path)
+            driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
             driver.get(url)
             inputElement = driver.find_element_by_xpath('/html/body/main/div[2]/div/textarea')
-            xerox.copy(small_fasta)
-            inputElement.send_keys(Keys.CONTROL+ "v")
+            #xerox.copy(small_fasta)
+            driver.execute_script("arguments[0].value = arguments[1];",inputElement,small_fasta)
+            #inputElement.send_keys(Keys.CONTROL+ "v")
             driver.find_element_by_xpath('/html/body/main/div[2]/div/button').click()
-            time.sleep(2)
+            WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.XPATH, "/html/body/main/div[2]/div/table/tbody/tr/td")))
             content = driver.page_source
             soup = bs(content,features="lxml")
             driver.close()
             try:
                 df = pd.read_html(soup.prettify())[0]
                 df.drop(df.tail(1).index,inplace=True)
+                df['Seq ID'] = [x.id for x in entrys]
+                df['Seq'] = [str(x.seq)for x in entrys]
                 df0 = pd.concat([df0, df], ignore_index=True)
             except IndexError:
                 problems.append(record)
@@ -148,14 +154,17 @@ def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', 
     dfs = pd.read_html(soup.prettify())
     wanted = (dfs[3],dfs[4],dfs[6])
     algos = ('SVM','RFC','ANN','DAC')
-    return wanted
+    #return wanted
+    entrys = list(SeqIO.parse(file,'fasta'))
     count = 0
     for df in wanted:
         df['Algorithm'] = algos[count]
+        df['Seq ID'] = [x.id for x in entrys]
+        df['Seq'] = [str(x.seq)for x in entrys]
         count+=1
     driver.close()
     final = pd.concat(wanted, ignore_index = True)
-    #return  final
+    return  final
     
 def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html'):
     with open(file) as f:
@@ -205,7 +214,7 @@ class ampep:
         except TimeoutException:
             print('Timeout, took more than 60s to send job')
         if verbose == True:
-            print('File sent to analysis \n to get the results call the retrieve method')
+            print(f'File {file} sent to analysis \n to get the results call the retrieve method')
         
         driver.close()
     def retrieve(mail, driver_path, wanted = 'finished'):
