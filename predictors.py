@@ -147,7 +147,7 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
     else:
         return df0
     
-def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200, n_try = 5000):
+def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200, n_try = 1000):
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
         lista = list(batch(list(records), n_try))
@@ -178,17 +178,25 @@ def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', 
             #inputElement.submit()
             content = driver.page_source
             soup = bs(content,features="lxml")
+            driver.close()
             dfs = pd.read_html(soup.prettify())
             wanted = (dfs[3],dfs[4],dfs[5],dfs[6])
             algos = ('SVM','RFC','ANN','DAC')
-            #return wanted
             count = 0
+            #return wanted , algos , entrys, fasta
             for df in wanted:
                 df['Algorithm'] = algos[count]
-                df['Seq ID'] = [x.id for x in entrys]
-                df['Seq'] = [str(x.seq)for x in entrys]
+                try:
+                    df['Seq ID'] = [x.id for x in entrys]
+                    df['Seq'] = [str(x.seq)for x in entrys]
+                except:
+                    try:
+                        used_entrys = [entrys[int(x)-1] for x in df['Seq. ID.']]
+                    except:
+                        return wanted , algos , entrys, fasta
+                    df['Seq ID'] = [x.id for x in used_entrys]
+                    df['Seq'] = [str(x.seq)for x in used_entrys]
                 count+=1
-            driver.close()
             final = pd.concat(wanted, ignore_index = True)
             df0 = pd.concat([df0, final], ignore_index=True)
     return df0
