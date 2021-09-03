@@ -2,10 +2,10 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup as bs
 import pandas as pd
-import xerox
 import time
 from Bio import SeqIO
 import os
+import xerox
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
@@ -13,8 +13,13 @@ import random
 import string
 from tqdm import tqdm
 
+#function to generate bathces of sequences
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)] 
 
-def set_chrome_config(headless = True):
+def set_chrome_config(headless = True, dest_path = 'C:/Downloads'):
     options = webdriver.ChromeOptions()
     options.add_argument("no-sandbox")
     options.add_argument("start-maximized")
@@ -31,6 +36,7 @@ def set_chrome_config(headless = True):
     options.add_argument("--lang=en_US")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-browser-side-navigation")
+    options.add_argument("download.default_directory="+dest_path)
     return options
     
 def random_string(length):
@@ -39,7 +45,8 @@ def random_string(length):
     # print random string
     return result_str
 
-def portreports(file, driver_path, url = 'https://www.portoreports.com/stm', n_try = 100000):
+def portreports(file, driver_path, n_try = 100000):
+    url = 'https://www.portoreports.com/stm'
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
         lista = list(batch(list(records), n_try))
@@ -70,13 +77,7 @@ def portreports(file, driver_path, url = 'https://www.portoreports.com/stm', n_t
             df['Seq ID'] = [x.id for x in entrys]
             df['Seq'] = [str(x.seq)for x in entrys]
             df0 = pd.concat([df0, df], ignore_index=True)
-    return df0.reset_index(drop = True)
-
-#function to generate bathces of sequences
-def batch(iterable, n=1):
-    l = len(iterable)
-    for ndx in range(0, l, n):
-        yield iterable[ndx:min(ndx + n, l)]    
+    return df0.reset_index(drop = True)   
         
 #function to skip sequences in a range
 def skip(file,upper_limit=9999999, lower_limit = 0, remove = True):
@@ -300,3 +301,88 @@ class ampep:
             final = pd.concat([final,df],ignore_index=True)
             driver.close()
         return final
+def iAMP(file, driver_path, n_try = 100000):
+    url = 'http://cabgrid.res.in:8080/amppred/server.php'
+    with open(file) as handle:
+        records = SeqIO.parse(handle, "fasta")
+        lista = list(batch(list(records), n_try))
+        first = True
+        for i in tqdm(range(len(lista)), total = len(lista)):
+            if first:
+                df0 = pd.DataFrame(columns = ['name_fasta','antibacterial','antiviral','antifungal']) #starting the DataFrame
+                first = False
+            record = lista[i]
+            SeqIO.write(record, "temp.fasta", "fasta")
+            with open('temp.fasta') as f:
+                fasta = f.read()
+            entrys = list(SeqIO.parse('temp.fasta','fasta')) 
+            os.remove("temp.fasta")
+        #with open(file) as f:
+        #    fasta = f.read()
+            driver = webdriver.Chrome(driver_path, options = set_chrome_config())
+            driver.get(url)
+            inputElement = driver.find_element_by_xpath('//*[@id="form1"]/div/textarea')
+            #xerox.copy(fasta)
+            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+            #inputElement.send_keys(Keys.CONTROL+ "v")
+            inputElement.submit()
+            #WebDriverWait(driver, 3).until(EC.visibility_of_element_located((By.XPATH, "/html/body/p/table/tbody/tr/td/table/tbody/tr[1]/th[2]")))
+            driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
+            content = driver.page_source
+            soup = bs(content,features="lxml")
+            driver.close()
+            df = pd.read_html(soup.prettify())[0].iloc[1:]
+            df.columns = df.iloc[0]
+            df[['name_fasta','antibacterial','antiviral','antifungal']]
+            #return df, entrys
+            df = df.drop(df.index[0])
+            df['Seq ID'] = [x.id for x in entrys]
+            df['Seq'] = [str(x.seq)for x in entrys]
+            df0 = pd.concat([df0, df], ignore_index=True)
+    return df0.reset_index(drop = True)[['antibacterial', 'antiviral', 'antifungal', 'Seq ID',
+       'Seq']]
+
+def iampe(file, driver_path, n_try = 100000, download_path = 'C:/Downloads'):
+    url = 'http://cbb1.ut.ac.ir/AMPClassifier/Index'
+    
+    with open(file) as handle:
+        records = SeqIO.parse(handle, "fasta")
+        lista = list(batch(list(records), n_try))
+        first = True
+        for i in tqdm(range(len(lista)), total = len(lista)):
+            if first:
+                df0 = pd.DataFrame(columns = ['Peptide sequence', ' kNN', ' SVM', ' RF', ' XGBoost','Seq ID']) #starting the DataFrame
+                first = False
+            record = lista[i]
+            SeqIO.write(record, "temp.fasta", "fasta")
+            with open('temp.fasta') as f:
+                fasta = f.read()
+            entrys = list(SeqIO.parse('temp.fasta','fasta')) 
+            os.remove("temp.fasta")
+        #with open(file) as f:
+        #    fasta = f.read()
+            driver = webdriver.Chrome(driver_path, options = set_chrome_config(headless = False))
+            driver.get(url)
+            inputElement = driver.find_element_by_xpath('//*[@id="inputSequence"]')
+            #xerox.copy(fasta)
+            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+            #inputElement.send_keys(Keys.CONTROL+ "v")
+            element = driver.find_element_by_xpath('//*[@id="classifiersForm"]/div/div[3]/div/div[2]/label[1]').click()
+            element = driver.find_element_by_xpath('//*[@id="classifiersForm"]/div/div[3]/div/div[2]/label[2]').click()
+            element = driver.find_element_by_xpath('//*[@id="classifiersForm"]/div/div[3]/div/div[2]/label[3]').click()
+            element = driver.find_element_by_xpath('//*[@id="classifiersForm"]/div/div[3]/div/div[2]/label[4]').click()
+            element = driver.find_element_by_xpath('//*[@id="classifiersForm"]/div/div[3]/div/div[2]/input[3]').click()
+            element = driver.find_element_by_xpath('//*[@id="modalCl"]/div/div/div[1]/div[5]/input').click()
+            file_name = driver.find_element_by_xpath('/html/body/div/div/div[2]/table/tbody/tr/td[2]/label').get_attribute("value")
+            element = driver.find_element_by_xpath('/html/body/div/div/div[2]/table/tbody/tr/td[3]/input[2]').click()
+            time.sleep(5)
+            #WebDriverWait(driver, 3).until(EC.visibility_of_element_located((By.XPATH, "/html/body/p/table/tbody/tr/td/table/tbody/tr[1]/th[2]")))
+            driver.close()
+            file = download_path+r'/OutIAMPEPreds.csv'
+            file = file.replace('/','//')
+            df = pd.read_csv(file)
+            os.remove(file)
+            df['Seq ID'] = [x.id for x in entrys]
+            #df['Seq'] = [str(x.seq)for x in entrys]
+            df0 = pd.concat([df0, df], ignore_index=True)
+    return df0.reset_index(drop = True)
