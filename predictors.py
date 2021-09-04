@@ -12,12 +12,12 @@ from selenium.webdriver.common.by import By
 import random
 import string
 from tqdm import tqdm
+from itertools import islice ,  zip_longest
 
 #function to generate bathces of sequences
-def batch(iterable, n=1):
-    l = len(iterable)
-    for ndx in range(0, l, n):
-        yield iterable[ndx:min(ndx + n, l)] 
+def batch(iterable,n):
+    it = iter(iterable)
+    return iter(lambda: tuple(islice(it, n)), ())
 
 def set_chrome_config(headless = True, dest_path = 'C:/Downloads'):
     options = webdriver.ChromeOptions()
@@ -45,17 +45,22 @@ def random_string(length):
     # print random string
     return result_str
 
+def n_seq(file):
+    with open(file) as handle:
+        tot_seq = handle.read().count('>')
+    return tot_seq
+
 def portreports(file, driver_path, n_try = 100000):
     url = 'https://www.portoreports.com/stm'
+    tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        lista = list(batch(list(records), n_try))
         first = True
-        for i in tqdm(range(len(lista)), total = len(lista)):
+        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
             if first:
                 df0 = pd.DataFrame(columns = ['Sequence Number', 'Score', 'Prediction', 'Seq ID', 'Seq']) #starting the DataFrame
                 first = False
-            record = lista[i]
+            record = list(record)
             SeqIO.write(record, "temp.fasta", "fasta")
             with open('temp.fasta') as f:
                 fasta = f.read()
@@ -77,7 +82,7 @@ def portreports(file, driver_path, n_try = 100000):
             df['Seq ID'] = [x.id for x in entrys]
             df['Seq'] = [str(x.seq)for x in entrys]
             df0 = pd.concat([df0, df], ignore_index=True)
-    return df0.reset_index(drop = True)   
+        return df0.reset_index(drop = True)   
         
 #function to skip sequences in a range
 def skip(file,upper_limit=9999999, lower_limit = 0, remove = True):
@@ -149,15 +154,15 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
         return df0
     
 def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200, n_try = 1000):
+    tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        lista = list(batch(list(records), n_try))
         first = True
-        for i in tqdm(range(len(lista)), total = len(lista)):
+        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
             if first:
                 df0 = pd.DataFrame(columns = ['Seq. ID.', 'Class', 'AMP Probability', 'Algorithm', 'Seq ID', 'Seq']) #starting the DataFrame
                 first = False
-            record = lista[i]
+            record = list(record)
             SeqIO.write(record, "temp.fasta", "fasta")
             with open('temp.fasta') as f:
                 fasta = f.read()
@@ -203,15 +208,15 @@ def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', 
     return df0
     
 def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html', n_try = 10000):
+    tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        lista = list(batch(list(records), n_try))
         first = True
-        for i in tqdm(range(len(lista)), total = len(lista)):
+        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
             if first:
                 df0 = pd.DataFrame(columns = ['Name', 'Sequence', 'Value', 'Label']) #starting the DataFrame
                 first = False
-            record = lista[i]
+            record = list(record)
             SeqIO.write(record, "temp.fasta", "fasta")
             with open('temp.fasta') as f:
                 fasta = f.read()
@@ -303,15 +308,15 @@ class ampep:
         return final
 def iAMP(file, driver_path, n_try = 100000):
     url = 'http://cabgrid.res.in:8080/amppred/server.php'
+    tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        lista = list(batch(list(records), n_try))
         first = True
-        for i in tqdm(range(len(lista)), total = len(lista)):
+        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
             if first:
                 df0 = pd.DataFrame(columns = ['name_fasta','antibacterial','antiviral','antifungal']) #starting the DataFrame
                 first = False
-            record = lista[i]
+            record = list(record)
             SeqIO.write(record, "temp.fasta", "fasta")
             with open('temp.fasta') as f:
                 fasta = f.read()
@@ -344,16 +349,15 @@ def iAMP(file, driver_path, n_try = 100000):
 
 def iampe(file, driver_path, n_try = 100000, download_path = 'C:/Downloads'):
     url = 'http://cbb1.ut.ac.ir/AMPClassifier/Index'
-    
+    tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        lista = list(batch(list(records), n_try))
         first = True
-        for i in tqdm(range(len(lista)), total = len(lista)):
+        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
             if first:
                 df0 = pd.DataFrame(columns = ['Peptide sequence', ' kNN', ' SVM', ' RF', ' XGBoost','Seq ID']) #starting the DataFrame
                 first = False
-            record = lista[i]
+            record = list(record)
             SeqIO.write(record, "temp.fasta", "fasta")
             with open('temp.fasta') as f:
                 fasta = f.read()
