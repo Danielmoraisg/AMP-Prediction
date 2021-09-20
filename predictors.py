@@ -13,6 +13,7 @@ import random
 import string
 from tqdm import tqdm
 from itertools import islice ,  zip_longest
+import concurrent.futures
 
 #function to generate bathces of sequences
 def batch(iterable,n):
@@ -50,38 +51,49 @@ def n_seq(file):
         tot_seq = handle.read().count('>')
     return tot_seq
 
-def portreports(file, driver_path, n_try = 100000):
+def records_2_fasta(record):
+    if type (record) != tuple:
+        record = [record]
+    fasta = ''
+    for i in record:
+        identifier = i.id
+        seq = i.seq
+        fasta+= f'>{identifier}\n{seq}\n'
+    return fasta
+
+def _portreports(entrys, driver_path, url):
+        fasta = records_2_fasta(entrys)
+        driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
+        driver.get(url)
+        inputElement = driver.find_element_by_xpath('//*[@id="post-77"]/div/form/textarea')
+        #xerox.copy(fasta)
+        driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+        #inputElement.send_keys(Keys.CONTROL+ "v")
+        inputElement.submit()
+        content = driver.page_source
+        soup = bs(content,features="lxml")
+        driver.close()
+        df = pd.read_html(soup.prettify())[0]
+        df['Seq ID'] = [x.id for x in entrys]
+        df['Seq'] = [str(x.seq)for x in entrys]
+        return df
+
+def portreports(file, driver_path, n_try = 100000, max_workers=None):
     url = 'https://www.portoreports.com/stm'
     tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
-            if first:
-                df0 = pd.DataFrame(columns = ['Sequence Number', 'Score', 'Prediction', 'Seq ID', 'Seq']) #starting the DataFrame
-                first = False
-            record = list(record)
-            SeqIO.write(record, "temp.fasta", "fasta")
-            with open('temp.fasta') as f:
-                fasta = f.read()
-            entrys = list(SeqIO.parse('temp.fasta','fasta')) 
-            os.remove("temp.fasta")
-        #with open(file) as f:
-        #    fasta = f.read()
-            driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
-            driver.get(url)
-            inputElement = driver.find_element_by_xpath('//*[@id="post-77"]/div/form/textarea')
-            #xerox.copy(fasta)
-            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
-            #inputElement.send_keys(Keys.CONTROL+ "v")
-            inputElement.submit()
-            content = driver.page_source
-            soup = bs(content,features="lxml")
-            driver.close()
-            df = pd.read_html(soup.prettify())[0]
-            df['Seq ID'] = [x.id for x in entrys]
-            df['Seq'] = [str(x.seq)for x in entrys]
-            df0 = pd.concat([df0, df], ignore_index=True)
+        df0 = pd.DataFrame(columns = ['Sequence Number', 'Score', 'Prediction', 'Seq ID', 'Seq']) #starting the DataFrame
+        print('Loading...')
+        with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
+            results = [executor.submit(_portreports,entrys, driver_path, url) for entrys in tqdm(batch(records,n_try), total = int(tot_seqs/n_try))]
+            print('retrieving results...')
+            for f in tqdm(concurrent.futures.as_completed(results),total = len(results)):
+                try:
+                    df = f.result()
+                except:
+                    continue
+                df0 = pd.concat([df0, df], ignore_index=True)
         return df0.reset_index(drop = True)   
         
 #function to skip sequences in a range
@@ -114,10 +126,7 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
     #generate tempfasta of 20 aas and passing it into the dbaasp website
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        if first:
-            df0 = pd.DataFrame(columns = ['Seq. ID','Class','Seq ID','Seq']) #starting the DataFrame
-            first = False
+        df0 = pd.DataFrame(columns = ['Seq. ID','Class','Seq ID','Seq']) #starting the DataFrame            
         problems = []
         lista = list(batch(list(records), n_try))
         for i in tqdm(range(len(lista)), total = len(lista)):
@@ -152,94 +161,90 @@ def dbaasp(file, driver_path,problems = False, n_try = 23, url = 'https://dbaasp
         return df0, problems
     else:
         return df0
-    
-def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200, n_try = 1000):
+
+def _campr3(entrys, driver_path, url, wait):
+    fasta = records_2_fasta(entrys)
+    driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
+    driver.implicitly_wait(wait)
+    driver.set_page_load_timeout(36000)
+    driver.get(url)
+    inputElement = driver.find_element_by_xpath('//*[@id="frm1"]/p[1]/textarea')
+    #xerox.copy(fasta)
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
+    algo = driver.find_element_by_xpath('//*[@id="frm1"]/p[6]/label/input')
+    #driver.execute_script("arguments[0].click();", algo)
+    algo.click()
+    WebDriverWait(driver, wait).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="frm1"]/p[7]/input[1]'))).click()
+    #inputElement.submit()
+    content = driver.page_source
+    soup = bs(content,features="lxml")
+    #return soup
+    driver.close()
+    dfs = pd.read_html(soup.prettify())
+    wanted = (dfs[3],dfs[4],dfs[5],dfs[6])
+    algos = ('SVM','RFC','ANN','DAC')
+    count = 0
+    #return wanted , algos , entrys, fasta
+    for df in wanted:
+        df['Algorithm'] = algos[count]
+        try:
+            df['Seq ID'] = [x.id for x in entrys]
+            df['Seq'] = [str(x.seq)for x in entrys]
+        except:
+            used_entrys = [entrys[int(x)-1] for x in df['Seq. ID.']]            
+            df['Seq ID'] = [x.id for x in used_entrys]
+            df['Seq'] = [str(x.seq)for x in used_entrys]
+        count+=1
+    final = pd.concat(wanted, ignore_index = True)
+    return final
+
+def campr3(file, driver_path, url = 'http://www.camp.bicnirrh.res.in/predict/', wait = 1200, n_try = 1000, max_workers=None):
     tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
-            if first:
-                df0 = pd.DataFrame(columns = ['Seq. ID.', 'Class', 'AMP Probability', 'Algorithm', 'Seq ID', 'Seq']) #starting the DataFrame
-                first = False
-            record = list(record)
-            SeqIO.write(record, "temp.fasta", "fasta")
-            with open('temp.fasta') as f:
-                fasta = f.read()
-            entrys = list(SeqIO.parse('temp.fasta','fasta'))
-            os.remove("temp.fasta")
-    #with open(file) as f:
-        #fasta = f.read()
-            driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
-            driver.implicitly_wait(wait)
-            driver.get(url)
-            inputElement = driver.find_element_by_xpath('//*[@id="frm1"]/p[1]/textarea')
-            #xerox.copy(fasta)
-            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
-            #inputElement.send_keys(Keys.CONTROL+ "v")
-            algo = driver.find_element_by_xpath('//*[@id="frm1"]/p[6]/label/input')
-            #driver.execute_script("arguments[0].click();", algo)
-            algo.click()
-            WebDriverWait(driver, wait).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="frm1"]/p[7]/input[1]'))).click()
-            #inputElement.submit()
-            content = driver.page_source
-            soup = bs(content,features="lxml")
-            driver.close()
-            dfs = pd.read_html(soup.prettify())
-            wanted = (dfs[3],dfs[4],dfs[5],dfs[6])
-            algos = ('SVM','RFC','ANN','DAC')
+        df0 = pd.DataFrame(columns = ['Seq. ID.', 'Class', 'AMP Probability', 'Algorithm', 'Seq ID', 'Seq']) #starting the DataFrame
+        with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
+            results = [executor.submit(_campr3,entrys, driver_path, url, wait) for entrys in tqdm(batch(records,n_try), total = int(tot_seqs/n_try))]
             count = 0
-            #return wanted , algos , entrys, fasta
-            for df in wanted:
-                df['Algorithm'] = algos[count]
+            for f in tqdm(concurrent.futures.as_completed(results),total = len(results)):
                 try:
-                    df['Seq ID'] = [x.id for x in entrys]
-                    df['Seq'] = [str(x.seq)for x in entrys]
-                except:
-                    try:
-                        used_entrys = [entrys[int(x)-1] for x in df['Seq. ID.']]
-                    except:
-                        return wanted , algos , entrys, fasta
-                    df['Seq ID'] = [x.id for x in used_entrys]
-                    df['Seq'] = [str(x.seq)for x in used_entrys]
-                count+=1
-            final = pd.concat(wanted, ignore_index = True)
-            df0 = pd.concat([df0, final], ignore_index=True)
-    return df0
+                    df = f.result()
+                except: 
+                    continue
+                df0 = pd.concat([df0, df], ignore_index=True)
+            return df0.reset_index(drop = True)   
+
+def _ADAM(entrys, driver_path, url):
+    fasta = records_2_fasta(entrys)
+    driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
+    driver.get(url)
+    inputElement = driver.find_element_by_xpath('//*[@id="main2"]/form/center[1]/textarea')
+    #xerox.copy(fasta)
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
+    inputElement.submit()
+    content = driver.page_source
+    soup = bs(content,features="lxml")
+    driver.close()
+    df = pd.read_html(soup.prettify())[1]
+    df.columns = df.iloc[0]
+    df.drop(df.index[0])
+    df = df.iloc[1: , :].reset_index(drop = True)
+    return df
     
-def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html', n_try = 10000):
+    
+def ADAM(file, driver_path, url = 'http://bioinformatics.cs.ntou.edu.tw/ADAM/svm_tool.html', n_try = 10000, max_workers = None):
     tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
-            if first:
-                df0 = pd.DataFrame(columns = ['Name', 'Sequence', 'Value', 'Label']) #starting the DataFrame
-                first = False
-            record = list(record)
-            SeqIO.write(record, "temp.fasta", "fasta")
-            with open('temp.fasta') as f:
-                fasta = f.read()
-            entrys = list(SeqIO.parse('temp.fasta','fasta'))
-            os.remove("temp.fasta")
-    #with open(file) as f:
-        #fasta = f.read()
-            driver = webdriver.Chrome(driver_path,chrome_options = set_chrome_config())
-            driver.get(url)
-            inputElement = driver.find_element_by_xpath('//*[@id="main2"]/form/center[1]/textarea')
-            #xerox.copy(fasta)
-            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
-            #inputElement.send_keys(Keys.CONTROL+ "v")
-            inputElement.submit()
-            content = driver.page_source
-            soup = bs(content,features="lxml")
-            driver.close()
-            df = pd.read_html(soup.prettify())[1]
-            df.columns = df.iloc[0]
-            df.drop(df.index[0])
-            df = df.iloc[1: , :].reset_index(drop = True)
-            df0 = pd.concat([df0, df], ignore_index=True)
-    return df0.reset_index(drop = True)
+        df0 = pd.DataFrame(columns = ['Name', 'Sequence', 'Value', 'Label']) #starting the DataFrame
+        with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
+            results = [executor.submit(_ADAM,entrys, driver_path, url) for entrys in tqdm(batch(records,n_try), total = int(tot_seqs/n_try))]
+            for f in concurrent.futures.as_completed(results):
+                df = f.result()
+                df0 = pd.concat([df0, df], ignore_index=True)
+        return df0.reset_index(drop = True)   
 
 class ampep:
 
@@ -306,44 +311,46 @@ class ampep:
             final = pd.concat([final,df],ignore_index=True)
             driver.close()
         return final
-def iAMP(file, driver_path, n_try = 100000):
+
+    
+def _iAMP(entrys, driver_path, url):
+    fasta = records_2_fasta(entrys)
+    driver = webdriver.Chrome(driver_path, options = set_chrome_config())
+    driver.get(url)
+    driver.set_page_load_timeout(36000)
+    inputElement = driver.find_element_by_xpath('//*[@id="form1"]/div/textarea')
+    #xerox.copy(fasta)
+    driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
+    #inputElement.send_keys(Keys.CONTROL+ "v")
+    inputElement.submit()
+    #WebDriverWait(driver, 3).until(EC.visibility_of_element_located((By.XPATH, "/html/body/p/table/tbody/tr/td/table/tbody/tr[1]/th[2]")))
+    driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
+    content = driver.page_source
+    soup = bs(content,features="lxml")
+    driver.close()
+    df = pd.read_html(soup.prettify())[0].iloc[1:]
+    df.columns = df.iloc[0]
+    df[['name_fasta','antibacterial','antiviral','antifungal']]
+    #return df, entrys
+    df = df.drop(df.index[0])
+    df['Seq ID'] = [x.id for x in entrys]
+    df['Seq'] = [str(x.seq)for x in entrys]
+    return df
+
+def iAMP(file, driver_path, n_try = 2000, max_workers = None):
     url = 'http://cabgrid.res.in:8080/amppred/server.php'
     tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
-            if first:
-                df0 = pd.DataFrame(columns = ['name_fasta','antibacterial','antiviral','antifungal']) #starting the DataFrame
-                first = False
-            record = list(record)
-            SeqIO.write(record, "temp.fasta", "fasta")
-            with open('temp.fasta') as f:
-                fasta = f.read()
-            entrys = list(SeqIO.parse('temp.fasta','fasta')) 
-            os.remove("temp.fasta")
-        #with open(file) as f:
-        #    fasta = f.read()
-            driver = webdriver.Chrome(driver_path, options = set_chrome_config())
-            driver.get(url)
-            inputElement = driver.find_element_by_xpath('//*[@id="form1"]/div/textarea')
-            #xerox.copy(fasta)
-            driver.execute_script("arguments[0].value = arguments[1];", inputElement,fasta)
-            #inputElement.send_keys(Keys.CONTROL+ "v")
-            inputElement.submit()
-            #WebDriverWait(driver, 3).until(EC.visibility_of_element_located((By.XPATH, "/html/body/p/table/tbody/tr/td/table/tbody/tr[1]/th[2]")))
-            driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
-            content = driver.page_source
-            soup = bs(content,features="lxml")
-            driver.close()
-            df = pd.read_html(soup.prettify())[0].iloc[1:]
-            df.columns = df.iloc[0]
-            df[['name_fasta','antibacterial','antiviral','antifungal']]
-            #return df, entrys
-            df = df.drop(df.index[0])
-            df['Seq ID'] = [x.id for x in entrys]
-            df['Seq'] = [str(x.seq)for x in entrys]
-            df0 = pd.concat([df0, df], ignore_index=True)
+        df0 = pd.DataFrame(columns = ['name_fasta','antibacterial','antiviral','antifungal']) #starting the DataFrame
+        with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
+            results = [executor.submit(_iAMP,entrys, driver_path, url) for entrys in tqdm(batch(records,n_try), total = int(tot_seqs/n_try))]
+            for f in tqdm(concurrent.futures.as_completed(results),total = len(results)):
+                try:
+                    df = f.result()
+                except:
+                    continue
+                df0 = pd.concat([df0, df], ignore_index=True)
     return df0.reset_index(drop = True)[['antibacterial', 'antiviral', 'antifungal', 'Seq ID',
        'Seq']]
 
@@ -352,19 +359,9 @@ def iampe(file, driver_path, n_try = 100000, download_path = 'C:/Downloads'):
     tot_seqs = n_seq(file)
     with open(file) as handle:
         records = SeqIO.parse(handle, "fasta")
-        first = True
-        for record in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
-            if first:
-                df0 = pd.DataFrame(columns = ['Peptide sequence', ' kNN', ' SVM', ' RF', ' XGBoost','Seq ID']) #starting the DataFrame
-                first = False
-            record = list(record)
-            SeqIO.write(record, "temp.fasta", "fasta")
-            with open('temp.fasta') as f:
-                fasta = f.read()
-            entrys = list(SeqIO.parse('temp.fasta','fasta')) 
-            os.remove("temp.fasta")
-        #with open(file) as f:
-        #    fasta = f.read()
+        df0 = pd.DataFrame(columns = ['Peptide sequence', ' kNN', ' SVM', ' RF', ' XGBoost','Seq ID']) #starting the DataFrame
+        for entrys in tqdm(batch(records,n_try), total = int(tot_seqs/n_try)):
+            fasta = records_2_fasta(entrys)
             driver = webdriver.Chrome(driver_path, options = set_chrome_config(headless = False))
             driver.get(url)
             inputElement = driver.find_element_by_xpath('//*[@id="inputSequence"]')
